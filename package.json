@@ -1,11 +1,11 @@
 {
   "name": "create-koa-api",
+  "bin": {
+    "create-koa-api": "./bin/cli.js"
+  },
   "version": "1.0.0",
   "description": "A modern Node.js backend API scaffold based on Koa2, featuring dynamic routing, middleware support, logging system, and CLI tools for rapid development.",
   "main": "app.js",
-  "bin": {
-    "create-koa-api": "./bin/www.js"
-  },
   "scripts": {
     "start": "node bin/www.js",
     "dev": "nodemon bin/www.js",
