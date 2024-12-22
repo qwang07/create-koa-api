@@ -16,10 +16,15 @@ const loadRoutes = () => {
         const componentPath = path.join(componentsPath, file);
         const component = require(componentPath);
         
+        // Handle both function-style and router-instance-style components
         if (typeof component === 'function') {
           component(router);
-          logger.info(`Loaded routes from component: ${file}`);
+        } else if (component.routes && component.allowedMethods) {
+          // Component is a router instance
+          router.use(component.routes());
+          router.use(component.allowedMethods());
         }
+        logger.info(`Loaded routes from component: ${file}`);
       }
     });
   } catch (error) {
