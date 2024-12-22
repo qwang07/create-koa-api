@@ -42,11 +42,11 @@ program
       fs.mkdirSync(projectPath, { recursive: true });
 
       // Initialize package.json
-      execSync('pnpm init -y', { cwd: projectPath });
+      execSync('npm init -y', { cwd: projectPath });
 
       // Install base dependencies
       logger.info('Installing base dependencies...');
-      execSync('pnpm add koa koa-router koa-bodyparser @koa/cors winston dotenv', { 
+      execSync('npm install koa koa-router koa-bodyparser @koa/cors winston dotenv', { 
         cwd: projectPath,
         stdio: 'inherit'
       });
@@ -54,7 +54,7 @@ program
       // Install optional dependencies based on user choices
       if (answers.enableDatabase) {
         logger.info('Installing database dependencies...');
-        execSync('pnpm add prisma @prisma/client', {
+        execSync('npm install prisma @prisma/client', {
           cwd: projectPath,
           stdio: 'inherit'
         });
@@ -62,7 +62,7 @@ program
 
       if (answers.enableCache) {
         logger.info('Installing cache dependencies...');
-        execSync('pnpm add redis', {
+        execSync('npm install redis', {
           cwd: projectPath,
           stdio: 'inherit'
         });
@@ -70,7 +70,7 @@ program
 
       if (answers.enableFileService) {
         logger.info('Installing file service dependencies...');
-        execSync('pnpm add minio', {
+        execSync('npm install minio', {
           cwd: projectPath,
           stdio: 'inherit'
         });
