@@ -25,7 +25,7 @@
     "@koa/cors": "^5.0.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
-    "inquirer": "^12.3.0",
+    "inquirer": "8.2.6",
     "koa": "^2.15.3",
     "koa-bodyparser": "^4.4.1",
     "koa-helmet": "^8.0.1",
