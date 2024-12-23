@@ -1,7 +1,0 @@
-{
-  "services": {
-    "database": false,
-    "cache": false,
-    "fileService": false
-  }
-}
