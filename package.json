@@ -1,14 +1,12 @@
 {
   "name": "create-koa-api",
+  "version": "1.0.0",
+  "description": "CLI tool to create a modern Node.js backend API based on Koa2",
+  "type": "module",
   "bin": {
     "create-koa-api": "./bin/cli.js"
   },
-  "version": "1.0.0",
-  "description": "A modern Node.js backend API scaffold based on Koa2, featuring dynamic routing, middleware support, logging system, and CLI tools for rapid development.",
-  "main": "app.js",
   "scripts": {
-    "start": "node bin/www.js",
-    "dev": "nodemon bin/www.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -17,25 +15,14 @@
     "scaffold",
     "backend",
     "nodejs",
-    "rest"
+    "rest",
+    "cli",
+    "generator"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@koa/cors": "^5.0.0",
-    "commander": "^12.1.0",
-    "dotenv": "^16.4.7",
-    "inquirer": "8.2.6",
-    "koa": "^2.15.3",
-    "koa-bodyparser": "^4.4.1",
-    "koa-helmet": "^8.0.1",
-    "koa-router": "^13.0.1",
-    "minio": "^8.0.3",
-    "prisma": "^6.1.0",
-    "redis": "^4.7.0",
-    "winston": "^3.17.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.9"
+    "commander": "^12.0.0",
+    "inquirer": "^9.2.12"
   }
 }
