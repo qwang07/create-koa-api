@@ -25,11 +25,11 @@ class Cache {
         }
       });
 
-      // 等待连接成功
+      // Wait for connection to succeed
       await new Promise((resolve, reject) => {
         this.client.once('connect', () => {
           this.connected = true;
-          logger.info('缓存服务连接成功');
+          logger.info('Cache service connected successfully');
           resolve();
         });
 
@@ -39,43 +39,43 @@ class Cache {
           }
         });
 
-        // 设置超时
+        // Set timeout
         setTimeout(() => {
           if (!this.connected) {
-            reject(new Error('缓存服务连接超时'));
+            reject(new Error('Cache service connection timed out'));
           }
         }, 5000);
       });
 
-      // 监听后续的错误
+      // Listen for subsequent errors
       this.client.on('error', (err) => {
-        logger.error('缓存服务错误:', err);
+        logger.error('Cache service error:', err);
       });
 
       return this.client;
     } catch (err) {
-      logger.error('缓存服务连接失败:', err);
+      logger.error('Cache service connection failed:', err);
       throw err;
     }
   }
 
   async get(key) {
     if (!this.connected) {
-      throw new Error('缓存服务未连接');
+      throw new Error('Cache service not connected');
     }
 
     try {
       const value = await this.client.get(key);
       return value ? JSON.parse(value) : null;
     } catch (err) {
-      logger.error('缓存读取失败:', err);
+      logger.error('Cache read failed:', err);
       throw err;
     }
   }
 
   async set(key, value, ttl = 3600) {
     if (!this.connected) {
-      throw new Error('缓存服务未连接');
+      throw new Error('Cache service not connected');
     }
 
     try {
@@ -86,20 +86,20 @@ class Cache {
         await this.client.set(key, stringValue);
       }
     } catch (err) {
-      logger.error('缓存写入失败:', err);
+      logger.error('Cache write failed:', err);
       throw err;
     }
   }
 
   async del(key) {
     if (!this.connected) {
-      throw new Error('缓存服务未连接');
+      throw new Error('Cache service not connected');
     }
 
     try {
       await this.client.del(key);
     } catch (err) {
-      logger.error('缓存删除失败:', err);
+      logger.error('Cache delete failed:', err);
       throw err;
     }
   }
@@ -109,7 +109,7 @@ class Cache {
       await this.client.quit();
       this.client = null;
       this.connected = false;
-      logger.info('缓存服务已断开连接');
+      logger.info('Cache service disconnected');
     }
   }
 }

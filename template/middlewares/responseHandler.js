@@ -3,18 +3,18 @@ import { createNamespacedLogger } from '../lib/logger.js';
 const logger = createNamespacedLogger('response');
 
 /**
- * 统一响应处理中间件
- * 包含：
- * 1. 请求计时
- * 2. 错误处理
- * 3. 响应格式化
- * 4. 文件处理
+ * Response handler middleware
+ * Features:
+ * 1. Request timing and performance monitoring
+ * 2. Error handling
+ * 3. Response formatting
+ * 4. File handling
  */
 export default async function responseHandler(ctx, next) {
-  // 扩展 ctx，添加便捷的响应方法
-  ctx.success = (data, message) => {
+  // Extend context with response helpers
+  ctx.success = (data = null) => {
     ctx.type = 'application/json';
-    ctx.body = message ? { data, message } : data;
+    ctx.body = data;
   };
 
   ctx.file = (filename, stream, mimeType) => {
@@ -30,43 +30,60 @@ export default async function responseHandler(ctx, next) {
   try {
     await next();
     const ms = Date.now() - start;
-    logger.info(`${ctx.method} ${ctx.url} - ${ms}ms`);
 
-    // 如果没有响应体或已经设置了 Content-Type，直接返回
+    // Add response time header
+    ctx.set('X-Response-Time', `${ms}ms`);
+
+    // Log request with timing
+    const logMessage = `${ctx.method} ${ctx.url} ${ctx.status} ${ms}ms ${ctx.response.length || 0}b`;
+    
+    // Log slow requests with memory usage
+    if (ms > 1000) {
+      const memory = process.memoryUsage();
+      logger.warn(`${logMessage} - Slow request`, {
+        memory: {
+          heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + 'MB',
+          rss: Math.round(memory.rss / 1024 / 1024) + 'MB'
+        }
+      });
+    } else {
+      logger.info(logMessage);
+    }
+
+    // If response is already handled or is a file, return
     if (!ctx.body || ctx.response.header['content-type']) {
       return;
     }
 
-    // 默认设置 JSON 响应
+    // Format JSON response
     ctx.type = 'application/json';
-    if (typeof ctx.body === 'object') {
-      // 如果已经是正确格式就不再包装
-      if (ctx.body.data !== undefined) {
-        return;
-      }
-      // 包装为标准格式
-      ctx.body = { data: ctx.body };
-    }
   } catch (err) {
     const ms = Date.now() - start;
-    ctx.status = err.status || 500;
+    
+    // Use error status from error object or default to 500
+    ctx.status = err.status || err.statusCode || 500;
     ctx.type = 'application/json';
     
-    // 错误响应
-    ctx.body = {
-      message: err.message || 'Internal Server Error',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    const errorBody = {
+      message: err.message || 'Internal Server Error'
     };
 
-    logger.error('Request Error', {
-      status: ctx.status,
-      message: err.message,
-      stack: err.stack,
-      url: ctx.url,
-      method: ctx.method,
-      duration: `${ms}ms`
-    });
+    // Add validation errors if available
+    if (err.details) {
+      errorBody.details = err.details;
+    }
 
+    // Add stack trace in development
+    if (process.env.NODE_ENV === 'development') {
+      errorBody.stack = err.stack;
+    }
+
+    ctx.body = errorBody;
+
+    // Log error with timing
+    logger.error(`${ctx.method} ${ctx.url} ${ctx.status} ${ms}ms - ${err.message}`);
+
+    // Emit error event for global handling
     ctx.app.emit('error', err, ctx);
   }
 }

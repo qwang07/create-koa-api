@@ -2,33 +2,22 @@ import { createNamespacedLogger } from '../lib/logger.js';
 
 const logger = createNamespacedLogger('database');
 
-// Database middleware
-export default () => {
-  // Check if database is enabled
-  if (process.env.ENABLE_DATABASE !== 'true') {
-    logger.info('Database service is disabled');
-    return async (ctx, next) => {
-      ctx.state.db = null;
-      await next();
-    };
+let client = null;
+// Initialize database connection
+if (process.env.ENABLE_DATABASE === 'true') {
+  try {
+    const { default: db } = await import('../lib/db.js');
+    await db.connect();
+    client = db.getPrismaClient();
+  } catch (error) {
+    logger.error('Failed to initialize database:', error);
   }
+} else {
+  logger.info('Database service is disabled');
+}
 
-  let client = null;
-
-  return async (ctx, next) => {
-    if (!client) {
-      try {
-        const db = await import('../lib/db.js');
-        client = db.default;
-      } catch (error) {
-        logger.error('Failed to initialize database:', error);
-        ctx.state.db = null;
-        await next();
-        return;
-      }
-    }
-
-    ctx.state.db = client;
-    await next();
-  };
+// Database middleware
+export default async (ctx, next) => {
+  ctx.state.db = client;
+  await next();
 };

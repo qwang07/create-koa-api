@@ -76,8 +76,8 @@ function generatePackageJson(projectName, projectInfo, services) {
     private: true,  // 防止意外发布
     main: 'app.js',
     scripts: {
-      "start": "node bin/www.js",
-      "dev": "nodemon bin/www.js",
+      "start": "node -r dotenv/config bin/www.js",
+      "dev": "nodemon -r dotenv/config bin/www.js",
       ...testScripts,
       ...(services.database ? {
         "prisma:generate": "prisma generate",
@@ -101,7 +101,8 @@ function generatePackageJson(projectName, projectInfo, services) {
       "dotenv": "^16.4.7",
       "joi": "^17.11.0",
       "koa": "^2.15.3",
-      "koa-bodyparser": "^4.4.1",
+      "koa-body": "^6.0.1",
+      "koa-compress": "^5.1.1",
       "koa-helmet": "^8.0.1",
       "koa-router": "^13.0.1",
       "koa-ratelimit": "^5.1.0",
@@ -165,6 +166,22 @@ model User {
   }
 
   writeFileSync(join(prismaDir, 'schema.prisma'), schemaContent);
+}
+
+// 生成数据库连接字符串
+function generateDatabaseUrl(answers) {
+  const { databaseType, databaseHost, databasePort, databaseName, databaseUser, databasePassword } = answers;
+  
+  switch (databaseType) {
+    case 'PostgreSQL':
+      return `postgresql://${databaseUser}:${databasePassword}@${databaseHost}:${databasePort}/${databaseName}?schema=public`;
+    case 'MySQL':
+      return `mysql://${databaseUser}:${databasePassword}@${databaseHost}:${databasePort}/${databaseName}`;
+    case 'SQLite':
+      return `sqlite:./${databaseName}.db`;
+    default:
+      return '';
+  }
 }
 
 // Set up commander
@@ -538,7 +555,7 @@ ${answers.databaseType === 'SQLite' ?
 pnpm dev
 
 Your API will be available at:
-- HTTP server: http://localhost:3000${answers.enableDatabase ? '\n- Database UI: http://localhost:5555' : ''}
+- HTTP server: http://localhost:3000
 - API documentation: http://localhost:3000/docs`);
 
       // 输出所有配置信息，用空行分隔

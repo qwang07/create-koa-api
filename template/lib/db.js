@@ -1,100 +1,100 @@
-import pkg from '@prisma/client';
-const { PrismaClient } = pkg;
+import { PrismaClient } from '@prisma/client';
 import { createNamespacedLogger } from './logger.js';
 
 const logger = createNamespacedLogger('database');
 
 class Database {
   constructor() {
-    this.client = null;
+    this.prisma = new PrismaClient({
+      log: [
+        { emit: 'event', level: 'query' },
+        { emit: 'event', level: 'error' },
+        { emit: 'event', level: 'info' },
+        { emit: 'event', level: 'warn' },
+      ],
+    });
+    
+    this.setupEventListeners();
+  }
+
+  setupEventListeners() {
+    // Query event
+    this.prisma.$on('query', (e) => {
+      logger.debug('Executing database query', {
+        query: e.query,
+        params: e.params,
+        duration: `${e.duration}ms`
+      });
+    });
+
+    // Error event
+    this.prisma.$on('error', (e) => {
+      logger.error('Database error', {
+        message: e.message,
+        target: e.target
+      });
+    });
+
+    // Info event
+    this.prisma.$on('info', (e) => {
+      logger.info('Database info', {
+        message: e.message,
+        target: e.target
+      });
+    });
+
+    // Warn event
+    this.prisma.$on('warn', (e) => {
+      logger.warn('Database warning', {
+        message: e.message,
+        target: e.target
+      });
+    });
+
+    // Disconnect on process exit
+    process.on('beforeExit', this.disconnect.bind(this));
+    process.on('SIGINT', this.disconnect.bind(this));
+    process.on('SIGTERM', this.disconnect.bind(this));
   }
 
   async connect() {
-    if (!process.env.DATABASE_URL) {
-      logger.warn('数据库连接URL未配置，数据库功能将被禁用');
-      return null;
-    }
-
     try {
-      this.client = new PrismaClient({
-        log: [
-          { emit: 'event', level: 'query' },
-          { emit: 'event', level: 'error' },
-          { emit: 'event', level: 'info' },
-          { emit: 'event', level: 'warn' }
-        ]
-      });
-
-      // 日志事件处理
-      this.client.$on('query', (e) => {
-        logger.debug('数据库查询:', e);
-      });
-
-      this.client.$on('error', (e) => {
-        logger.error('数据库错误:', e);
-      });
-
-      this.client.$on('info', (e) => {
-        logger.info('数据库信息:', e);
-      });
-
-      this.client.$on('warn', (e) => {
-        logger.warn('数据库警告:', e);
-      });
-
-      await this.client.$connect();
-      logger.info('数据库连接成功');
-      return this.client;
-    } catch (err) {
-      logger.error('数据库连接失败:', err);
-      throw err;
+      await this.prisma.$connect();
+      logger.info('Database connected successfully');
+    } catch (error) {
+      logger.error('Database connection failed', { error });
+      throw error;
     }
   }
 
   async disconnect() {
-    if (this.client) {
-      await this.client.$disconnect();
-      this.client = null;
-      logger.info('数据库连接已断开');
-    }
-  }
-
-  getClient() {
-    if (!this.client) {
-      throw new Error('数据库未连接，请先调用 connect() 方法');
-    }
-    return this.client;
-  }
-
-  // 事务处理
-  async transaction(callback) {
-    if (!this.client) {
-      throw new Error('数据库未连接');
-    }
-
     try {
-      const result = await this.client.$transaction(callback);
-      return result;
-    } catch (err) {
-      logger.error('数据库事务执行失败:', err);
-      throw err;
+      await this.prisma.$disconnect();
+      logger.info('Database connection closed');
+    } catch (error) {
+      logger.error('Failed to close database connection', { error });
+      // Don't throw error in this case, as it's during cleanup
     }
   }
 
-  // 批量操作
-  async batch(operations) {
-    if (!this.client) {
-      throw new Error('数据库未连接');
-    }
+  // Get Prisma client instance
+  getPrismaClient() {
+    return this.prisma;
+  }
 
+  // Health check
+  async healthCheck() {
     try {
-      const result = await this.client.$transaction(operations);
-      return result;
-    } catch (err) {
-      logger.error('数据库批量操作失败:', err);
-      throw err;
+      await this.prisma.$queryRaw`SELECT 1`;
+      return true;
+    } catch (error) {
+      logger.error('Database health check failed', { error });
+      return false;
     }
   }
 }
 
-export default new Database();
+// Create singleton instance
+const database = new Database();
+
+export default database;
