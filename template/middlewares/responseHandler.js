@@ -1,19 +1,24 @@
 import { createNamespacedLogger } from '../lib/logger.js';
 
-const logger = createNamespacedLogger('response');
+const logger = createNamespacedLogger('middleware:response');
 
 /**
  * Response handler middleware
  * Features:
  * 1. Request timing and performance monitoring
- * 2. Error handling
- * 3. Response formatting
+ * 2. Error handling (500 errors only)
+ * 3. Response formatting (text/json)
  * 4. File handling
  */
 export default async function responseHandler(ctx, next) {
   // Extend context with response helpers
   ctx.success = (data = null) => {
-    ctx.type = 'application/json';
+    // 如果是字符串且不是 JSON 格式，则作为纯文本返回
+    if (typeof data === 'string' && !/^[\[\{]/.test(data)) {
+      ctx.type = 'text/plain';
+    } else {
+      ctx.type = 'application/json';
+    }
     ctx.body = data;
   };
 
@@ -50,40 +55,55 @@ export default async function responseHandler(ctx, next) {
       logger.info(logMessage);
     }
 
-    // If response is already handled or is a file, return
+    // 如果响应已经被处理或是文件流，直接返回
     if (!ctx.body || ctx.response.header['content-type']) {
       return;
     }
 
-    // Format JSON response
-    ctx.type = 'application/json';
+    // 使用 success 处理响应
+    ctx.success(ctx.body);
+
   } catch (err) {
     const ms = Date.now() - start;
     
-    // Use error status from error object or default to 500
-    ctx.status = err.status || err.statusCode || 500;
+    // Add response time header
+    ctx.set('X-Response-Time', `${ms}ms`);
+    
+    // 处理所有错误
     ctx.type = 'application/json';
     
-    const errorBody = {
-      message: err.message || 'Internal Server Error'
-    };
+    // 根据错误类型设置状态码和响应体
+    if (!err.status || err.status === 500) {
+      ctx.status = 500;
+      ctx.body = {
+        error: process.env.NODE_ENV === 'production' 
+          ? 'Internal Server Error'
+          : err.message
+      };
 
-    // Add validation errors if available
-    if (err.details) {
-      errorBody.details = err.details;
+      // 在开发环境添加堆栈信息
+      if (process.env.NODE_ENV === 'development') {
+        ctx.body.stack = err.stack;
+      }
+
+      // 记录详细错误日志
+      logger.error(`${ctx.method} ${ctx.url} ${ctx.status} ${ms}ms - ${err.message}`, {
+        error: err.message,
+        stack: err.stack
+      });
+    } else {
+      // 处理其他错误（如验证错误、404等）
+      ctx.status = err.status;
+      ctx.body = {
+        error: err.message,
+        ...(err.status === 422 && err.details && { details: err.details })
+      };
+
+      // 记录业务错误日志
+      logger.warn(`${ctx.method} ${ctx.url} ${ctx.status} ${ms}ms - ${err.message}`, {
+        error: err.message,
+        ...(err.status === 422 && err.details && { details: err.details })
+      });
     }
-
-    // Add stack trace in development
-    if (process.env.NODE_ENV === 'development') {
-      errorBody.stack = err.stack;
-    }
-
-    ctx.body = errorBody;
-
-    // Log error with timing
-    logger.error(`${ctx.method} ${ctx.url} ${ctx.status} ${ms}ms - ${err.message}`);
-
-    // Emit error event for global handling
-    ctx.app.emit('error', err, ctx);
   }
 }

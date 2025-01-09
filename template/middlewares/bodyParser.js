@@ -1,7 +1,7 @@
 import { koaBody } from 'koa-body';
 import { createNamespacedLogger } from '../lib/logger.js';
 
-const logger = createNamespacedLogger('body-parser');
+const logger = createNamespacedLogger('middleware:body-parser');
 
 /**
  * Request body parser middleware configuration
@@ -18,6 +18,11 @@ export default koaBody({
     maxFileSize: 20 * 1024 * 1024, // 20MB
     keepExtensions: true,
     multiples: false, // Only allow single file upload
+    onError: (err) => {
+      logger.error('File upload error:', err);
+      err.status = 413;
+      throw err;
+    }
   },
   
   parsedMethods: ['POST', 'PUT', 'PATCH', 'DELETE'],
@@ -26,20 +31,12 @@ export default koaBody({
   formLimit: '1mb',
   textLimit: '1mb',
 
-  onError: (err, ctx) => {
-    let status = 400;
-    let message = 'Bad Request';
-    
-    if (err.status === 413 || err.message.includes('maxFileSize')) {
-      status = 413;
-      message = 'File too large (max 20MB)';
-      logger.error(`${ctx.method} ${ctx.url} ${status} - ${message}`);
-    } else {
-      logger.error(`${ctx.method} ${ctx.url} ${status} - ${err.message}`);
+  onError: (err) => {
+    logger.error('Body parsing error:', err);
+    if (err.message.includes('maxFileSize')) {
+      err.status = 413;
+      err.message = 'File too large (max 20MB)';
     }
-    
-    ctx.status = status;
-    ctx.body = { message };
-    ctx.app.emit('error', err, ctx);
+    throw err;
   }
 });

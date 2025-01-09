@@ -1,85 +1,102 @@
-import joi from '../lib/joi.js';
+import { createNamespacedLogger } from '../lib/logger.js';
+import { createValidator, localize } from '../lib/validator.js';
+
+const logger = createNamespacedLogger('middleware:validator');
+
+// 创建验证器实例
+const validator = createValidator({
+  enableRef: process.env.ENABLE_DATABASE === 'true'
+});
+
+// 格式化验证错误
+const formatValidationError = (errors) => {
+  if (!errors || !errors.length) {
+    return [{
+      field: 'unknown',
+      message: '验证失败'
+    }];
+  }
+
+  // 本地化错误消息
+  localize.zh(errors);
+
+  return errors.map(error => ({
+    field: error.instancePath.slice(1) || error.params?.missingProperty || error.params?.ref?.id || 'value',
+    message: (error.message || '验证失败').replace(/"/g, '') // 移除多余的引号
+  }));
+};
 
 /**
  * 创建验证中间件
- * @param {Object} schema - Joi schema 对象，包含 params, query, body 的验证规则
- * @param {Object} options - 验证选项
+ * @param {Object} schema 验证模式
+ * @param {Object} [schema.params] 路径参数验证模式
+ * @param {Object} [schema.query] 查询参数验证模式
+ * @param {Object} [schema.body] 请求体验证模式
  * @returns {Function} Koa 中间件
  */
-const validator = (schema, options = {}) => {
+export default (schema) => {
+  if (!schema) {
+    throw new Error('Schema is required');
+  }
+
+  // 预编译 schema
+  const validateParams = schema.params ? validator.compile(schema.params) : null;
+  const validateQuery = schema.query ? validator.compile(schema.query) : null;
+  const validateBody = schema.body ? validator.compile(schema.body) : null;
+
   return async (ctx, next) => {
+    const { params, query } = ctx;
+    const { body } = ctx.request;
+    const { db } = ctx.state;
+
+    logger.info('开始验证请求', {
+      hasDb: !!db,
+      params,
+      query,
+      body
+    });
+
     try {
-      // 只验证 schema 中定义的部分
-      if (schema.params) {
-        ctx.params = await joi.object(schema.params)
-          .validateAsync(ctx.params, { 
-            ...options,
-            context: { ctx } // 传入 ctx 以便在自定义验证中使用
-          });
-      }
-      if (schema.query) {
-        ctx.query = await joi.object(schema.query)
-          .validateAsync(ctx.query, {
-            ...options,
-            context: { ctx }
-          });
-      }
-      if (schema.body) {
-        ctx.request.body = await joi.object(schema.body)
-          .validateAsync(ctx.request.body, {
-            ...options,
-            context: { ctx }
-          });
+      // 验证路径参数
+      if (validateParams) {
+        logger.info('验证路径参数');
+        const result = await validateParams(params, db);
+        if (!result.valid) {
+          logger.warn('路径参数验证失败', { errors: result.errors });
+          ctx.throw(422, '路径参数验证失败', { details: formatValidationError(result.errors) });
+        }
+        ctx.params = result.data;
       }
 
-      await next();
-    } catch (err) {
-      if (err.isJoi) {
-        ctx.throw(400, err.details[0].message);
+      // 验证查询参数
+      if (validateQuery) {
+        logger.info('验证查询参数');
+        const result = await validateQuery(query, db);
+        if (!result.valid) {
+          logger.warn('查询参数验证失败', { errors: result.errors });
+          ctx.throw(422, '查询参数验证失败', { details: formatValidationError(result.errors) });
+        }
+        ctx.query = result.data;
       }
-      throw err;
+
+      // 验证请求体
+      if (validateBody) {
+        logger.info('验证请求体');
+        const result = await validateBody(body, db);
+        if (!result.valid) {
+          logger.warn('请求体验证失败', { errors: result.errors });
+          ctx.throw(422, '请求体验证失败', { details: formatValidationError(result.errors) });
+        }
+        ctx.request.body = result.data;
+      }
+    } catch (error) {
+      logger.error('验证过程出错', { error });
+      if (error.validation) {
+        ctx.throw(422, '请求验证失败', { details: formatValidationError(error.errors) });
+      }
+      throw error;
     }
+
+    await next();
   };
 };
-
-/**
- * 创建数据库引用验证规则
- * @param {string} model - 模型名称（如 'user', 'post' 等）
- * @param {Function} findById - 根据 ID 查找记录的函数
- * @param {Object} options - 其他选项
- * @returns {Object} Joi 验证规则
- */
-const ref = (model, findById, options = {}) => {
-  const { required = true, message } = options;
-  
-  let rule = Joi.string().custom(async (value, helpers) => {
-    const { ctx } = helpers.prefs.context;
-    
-    try {
-      const record = await findById(value);
-      if (!record) {
-        throw new Error();
-      }
-      // 将找到的记录存储在 ctx.state 中，以便后续使用
-      ctx.state[model] = record;
-      return value;
-    } catch (err) {
-      throw new Error(message || `Invalid ${model} ID`);
-    }
-  }).messages({
-    'string.empty': `${model} ID is required`,
-    'any.required': `${model} ID is required`,
-  });
-  
-  if (required) {
-    rule = rule.required();
-  }
-  return rule;
-};
-
-// 默认导出
-export default validator;
-
-// 命名导出
-export const validate = validator;
-export { ref };
